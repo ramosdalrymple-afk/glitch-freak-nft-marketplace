@@ -5,18 +5,18 @@ import { useState, useEffect } from "react";
 
 // --- THEME CONSTANTS ---
 const THEME = {
-  bg: "#0B0F1A",        
-  cardBg: "#14161F",    
-  accent: "#7CFF00",    
-  highlight: "#FF2F92", 
-  secondary: "#00E5FF", 
+  bg: "#0B0F1A",
+  cardBg: "#14161F",
+  accent: "#7CFF00",
+  highlight: "#FF2F92",
+  secondary: "#00E5FF",
   text: "#ffffff",
   muted: "#666666",
   border: "#2A2A35",
   danger: "#FF4444"
 };
 
-// --- HELPER: ROBUST ATTRIBUTE EXTRACTOR (Reused) ---
+// --- HELPER: ROBUST ATTRIBUTE EXTRACTOR ---
 const getAttribute = (item: any, key: string): string => {
   if (!item || !item.data) return "N/A";
 
@@ -57,6 +57,86 @@ const getAttribute = (item: any, key: string): string => {
 
   return "N/A";
 };
+
+// --- COMPONENT: TRANSACTION FEEDBACK MODAL (NEW) ---
+function TransactionFeedback({ type, message, onClose }: { type: 'success' | 'error', message: string, onClose: () => void }) {
+  const isSuccess = type === 'success';
+  const primaryColor = isSuccess ? THEME.accent : THEME.danger;
+  const title = isSuccess ? "ASSET SECURED" : "CRITICAL FAILURE";
+  const icon = isSuccess ? "✓" : "!";
+
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+      background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)",
+      display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000
+    }}>
+      <div style={{
+        width: "450px", maxWidth: "90%",
+        background: THEME.bg,
+        border: `2px solid ${primaryColor}`,
+        boxShadow: `0 0 30px ${primaryColor}40`,
+        position: "relative",
+        padding: "2px" // Inner border effect
+      }}>
+        {/* DECORATIVE CORNERS */}
+        <div style={{ position: "absolute", top: "-2px", left: "-2px", width: "10px", height: "10px", background: primaryColor }}></div>
+        <div style={{ position: "absolute", bottom: "-2px", right: "-2px", width: "10px", height: "10px", background: primaryColor }}></div>
+
+        {/* HEADER */}
+        <div style={{ background: primaryColor, padding: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{
+            background: "black", color: primaryColor, width: "24px", height: "24px",
+            display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold"
+          }}>
+            {icon}
+          </div>
+          <h3 style={{ margin: 0, color: "black", fontSize: "16px", fontWeight: "900", letterSpacing: "2px" }}>
+            {title}
+          </h3>
+        </div>
+
+        {/* BODY */}
+        <div style={{ padding: "30px", textAlign: "center" }}>
+          <p style={{
+            fontFamily: "monospace", color: "white", fontSize: "14px", lineHeight: "1.5",
+            borderLeft: `2px solid ${THEME.border}`, paddingLeft: "15px", margin: "0 0 20px 0", textAlign: "left"
+          }}>
+            {type === 'error' ? "ERROR_LOG: " : "TRANSACTION_HASH: "}<br />
+            <span style={{ color: type === 'error' ? "#ff8888" : "#ccffcc", wordBreak: "break-all" }}>
+              {message}
+            </span>
+          </p>
+
+          <button onClick={onClose} style={{
+            background: "transparent",
+            border: `1px solid ${primaryColor}`,
+            color: primaryColor,
+            padding: "12px 30px",
+            fontSize: "14px",
+            fontWeight: "bold",
+            cursor: "pointer",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            width: "100%",
+            transition: "all 0.2s"
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = primaryColor;
+              e.currentTarget.style.color = "black";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = primaryColor;
+            }}
+          >
+            {isSuccess ? "CONFIRM RECEIPT" : "ACKNOWLEDGE ERROR"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // --- PARENT COMPONENT ---
 export function Marketplace({ refreshTrigger }: { refreshTrigger: number }) {
@@ -109,7 +189,7 @@ export function Marketplace({ refreshTrigger }: { refreshTrigger: number }) {
   );
 }
 
-// --- COMPONENT: LISTING CARD (Updated with Stats) ---
+// --- COMPONENT: LISTING CARD ---
 function ListingCard({ listingItem, onClick }: { listingItem: any, onClick: () => void }) {
     const { data: listingObject } = useSuiClientQuery("getObject", {
         id: listingItem.objectId, options: { showContent: true }
@@ -219,7 +299,7 @@ function ListingCard({ listingItem, onClick }: { listingItem: any, onClick: () =
     );
 }
 
-// --- COMPONENT: BUY MODAL (Updated with Bio-Scan Panel) ---
+// --- COMPONENT: BUY MODAL (Updated) ---
 function BuyModal({ item, onClose }: { item: any, onClose: () => void }) {
     const account = useCurrentAccount();
     const { mutate: signAndExecute } = useSignAndExecuteTransaction();
@@ -228,6 +308,12 @@ function BuyModal({ item, onClose }: { item: any, onClose: () => void }) {
 
     const [manualType, setManualType] = useState("");
     const [useManual, setUseManual] = useState(false);
+
+    // Feedback State
+    const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | null, message: string }>({
+        type: null,
+        message: ''
+    });
 
     // Fetch Full Data
     const { data: listingObject } = useSuiClientQuery("getObject", {
@@ -278,8 +364,14 @@ function BuyModal({ item, onClose }: { item: any, onClose: () => void }) {
     const imageUrl = nftObject?.data?.display?.data?.image_url;
 
     const handleBuy = () => {
-        if (!account) return alert("⚠️ Connect Wallet First!");
-        if (!finalType) return alert("❌ ERROR: NFT Type not detected.");
+        if (!account) {
+            setFeedback({ type: 'error', message: "WALLET_NOT_CONNECTED" });
+            return;
+        }
+        if (!finalType) {
+            setFeedback({ type: 'error', message: "NFT_TYPE_DETECTION_FAILED" });
+            return;
+        }
 
         // @ts-ignore
         const rawPriceStr = listingObject?.data?.content?.fields?.ask || listingObject?.data?.content?.fields?.price || "0";
@@ -300,133 +392,162 @@ function BuyModal({ item, onClose }: { item: any, onClose: () => void }) {
             });
 
             signAndExecute({ transaction: tx }, {
-                onSuccess: () => { alert("✅ BUY SUCCESSFUL!"); onClose(); },
-                onError: (e) => { console.error(e); alert(`❌ FAILED: ${e.message}`); }
+                onSuccess: (result) => {
+                    setFeedback({ 
+                        type: 'success', 
+                        message: `DIGEST::${result.digest.slice(0, 15)}...` 
+                    });
+                },
+                onError: (e) => { 
+                    console.error(e);
+                    setFeedback({ type: 'error', message: e.message || "UNKNOWN_RPC_ERROR" });
+                }
             });
         } catch (err: any) {
-            alert(`❌ ERROR: ${err.message}`);
+            setFeedback({ type: 'error', message: err.message });
+        }
+    };
+
+    const handleFeedbackClose = () => {
+        const wasSuccess = feedback.type === 'success';
+        setFeedback({ type: null, message: '' });
+        
+        // If the buy worked, close the main modal to trigger refetch
+        if (wasSuccess) {
+            onClose();
         }
     };
 
     return (
-        <div style={{ 
-            position: "fixed", top: 0, left: 0, width: "100%", height: "100%", 
-            background: "rgba(0,0,0,0.9)", backdropFilter: "blur(5px)",
-            display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 
-        }}>
+        <>
             <div style={{ 
-                width: "800px", maxWidth: "95%", background: "black", 
-                border: `2px solid ${THEME.highlight}`, 
-                boxShadow: `0 0 50px ${THEME.highlight}40`,
-                display: "flex", flexDirection: "column"
+                position: "fixed", top: 0, left: 0, width: "100%", height: "100%", 
+                background: "rgba(0,0,0,0.9)", backdropFilter: "blur(5px)",
+                display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 
             }}>
-                {/* HEADER */}
-                <div style={{ padding: "15px 20px", borderBottom: "1px solid #333", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#111" }}>
-                     <div style={{display:"flex", alignItems:"center", gap:"10px"}}>
-                        <span style={{width:"10px", height:"10px", background:THEME.highlight, borderRadius:"50%", display:"inline-block", boxShadow:`0 0 8px ${THEME.highlight}`}}></span>
-                        <h3 style={{ margin: 0, color: "white", textTransform: "uppercase", letterSpacing: "2px" }}>ACQUISITION PROTOCOL</h3>
-                    </div>
-                    <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#666", fontSize: "24px", cursor: "pointer" }}>&times;</button>
-                </div>
-
-                {/* BODY */}
-                <div style={{ padding: "30px", display: "flex", gap: "30px", flexDirection: "row", flexWrap: "wrap" }}>
-                    
-                    {/* LEFT: IMAGE */}
-                    <div style={{ flex: "1", minWidth: "250px" }}>
-                        <div style={{ width: "100%", height: "300px", background: "#050505", border: `1px solid ${THEME.border}`, display:"flex", alignItems:"center", justifyContent:"center", overflow: "hidden", position: "relative" }}>
-                             {/* Scanline overlay */}
-                             <div style={{position:"absolute", top:0, left:0, right:0, bottom:0, background: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%)", backgroundSize: "100% 4px", pointerEvents:"none", zIndex:2}}></div>
-                             {imageUrl ? <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "NO VISUAL"}
+                <div style={{ 
+                    width: "800px", maxWidth: "95%", background: "black", 
+                    border: `2px solid ${THEME.highlight}`, 
+                    boxShadow: `0 0 50px ${THEME.highlight}40`,
+                    display: "flex", flexDirection: "column"
+                }}>
+                    {/* HEADER */}
+                    <div style={{ padding: "15px 20px", borderBottom: "1px solid #333", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#111" }}>
+                        <div style={{display:"flex", alignItems:"center", gap:"10px"}}>
+                            <span style={{width:"10px", height:"10px", background:THEME.highlight, borderRadius:"50%", display:"inline-block", boxShadow:`0 0 8px ${THEME.highlight}`}}></span>
+                            <h3 style={{ margin: 0, color: "white", textTransform: "uppercase", letterSpacing: "2px" }}>ACQUISITION PROTOCOL</h3>
                         </div>
-                        <div style={{marginTop: "15px", textAlign:"center"}}>
-                            <div style={{ fontSize: "10px", color: THEME.muted, letterSpacing: "2px" }}>ITEM ID</div>
-                            <div style={{ fontFamily: "monospace", color: THEME.secondary, fontSize: "12px", wordBreak: "break-all" }}>
-                                {item.name.value.toString().slice(0,14)}...
-                            </div>
-                        </div>
+                        <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#666", fontSize: "24px", cursor: "pointer" }}>&times;</button>
                     </div>
 
-                    {/* RIGHT: DETAILS */}
-                    <div style={{ flex: "1.2", display: "flex", flexDirection: "column", gap: "20px" }}>
+                    {/* BODY */}
+                    <div style={{ padding: "30px", display: "flex", gap: "30px", flexDirection: "row", flexWrap: "wrap" }}>
                         
-                        {/* NAME & PRICE */}
-                        <div style={{ borderBottom: `1px dashed ${THEME.border}`, paddingBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                             <div>
-                                <label style={{ fontSize: "10px", color: THEME.muted, textTransform: "uppercase" }}>TARGET</label>
-                                <div style={{ color: "white", fontSize: "24px", fontWeight: "900", textTransform: "uppercase" }}>
-                                    {nftObject?.data?.display?.data?.name || "UNKNOWN"}
+                        {/* LEFT: IMAGE */}
+                        <div style={{ flex: "1", minWidth: "250px" }}>
+                            <div style={{ width: "100%", height: "300px", background: "#050505", border: `1px solid ${THEME.border}`, display:"flex", alignItems:"center", justifyContent:"center", overflow: "hidden", position: "relative" }}>
+                                    {/* Scanline overlay */}
+                                    <div style={{position:"absolute", top:0, left:0, right:0, bottom:0, background: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%)", backgroundSize: "100% 4px", pointerEvents:"none", zIndex:2}}></div>
+                                    {imageUrl ? <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "NO VISUAL"}
+                            </div>
+                            <div style={{marginTop: "15px", textAlign:"center"}}>
+                                <div style={{ fontSize: "10px", color: THEME.muted, letterSpacing: "2px" }}>ITEM ID</div>
+                                <div style={{ fontFamily: "monospace", color: THEME.secondary, fontSize: "12px", wordBreak: "break-all" }}>
+                                    {item.name.value.toString().slice(0,14)}...
                                 </div>
-                             </div>
-                             <div style={{ textAlign: "right" }}>
-                                <label style={{ fontSize: "10px", color: THEME.muted, textTransform: "uppercase" }}>PRICE</label>
-                                <div style={{ fontSize: "24px", fontWeight: "bold", color: THEME.accent }}>{getPrice()} SUI</div>
-                             </div>
+                            </div>
                         </div>
 
-                        {/* --- BIO SCAN RESULTS --- */}
-                        <div style={{ background: "#0e1016", padding: "15px", border: `1px solid ${THEME.border}` }}>
-                            <div style={{ color: THEME.secondary, fontSize: "12px", fontWeight: "bold", marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
-                                <span>/// BIO_SCAN_RESULTS</span>
-                                <span>STATUS: LISTED</span>
+                        {/* RIGHT: DETAILS */}
+                        <div style={{ flex: "1.2", display: "flex", flexDirection: "column", gap: "20px" }}>
+                            
+                            {/* NAME & PRICE */}
+                            <div style={{ borderBottom: `1px dashed ${THEME.border}`, paddingBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div>
+                                    <label style={{ fontSize: "10px", color: THEME.muted, textTransform: "uppercase" }}>TARGET</label>
+                                    <div style={{ color: "white", fontSize: "24px", fontWeight: "900", textTransform: "uppercase" }}>
+                                        {nftObject?.data?.display?.data?.name || "UNKNOWN"}
+                                    </div>
+                                    </div>
+                                    <div style={{ textAlign: "right" }}>
+                                    <label style={{ fontSize: "10px", color: THEME.muted, textTransform: "uppercase" }}>PRICE</label>
+                                    <div style={{ fontSize: "24px", fontWeight: "bold", color: THEME.accent }}>{getPrice()} SUI</div>
+                                    </div>
                             </div>
 
-                            {/* DNA */}
-                            <div style={{ marginBottom: "12px" }}>
-                                <div style={{ fontSize: "10px", color: "#555" }}>DNA_SEQUENCE</div>
-                                <div style={{ fontFamily: "monospace", color: "#ddd", fontSize: "14px", letterSpacing: "1px", wordBreak: "break-all" }}>
-                                    {dna !== "N/A" ? dna : <span style={{color: "#444"}}>ENCRYPTED</span>}
+                            {/* --- BIO SCAN RESULTS --- */}
+                            <div style={{ background: "#0e1016", padding: "15px", border: `1px solid ${THEME.border}` }}>
+                                <div style={{ color: THEME.secondary, fontSize: "12px", fontWeight: "bold", marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
+                                    <span>/// BIO_SCAN_RESULTS</span>
+                                    <span>STATUS: LISTED</span>
                                 </div>
-                            </div>
 
-                            <div style={{ display: "flex", gap: "20px" }}>
-                                <div>
-                                    <div style={{ fontSize: "10px", color: "#555" }}>MUTATION_CLASS</div>
-                                    <div style={{ color: getClassColor(mutationClass), fontSize: "16px", fontWeight: "bold", textShadow: `0 0 5px ${getClassColor(mutationClass)}` }}>
-                                        {mutationClass}
+                                {/* DNA */}
+                                <div style={{ marginBottom: "12px" }}>
+                                    <div style={{ fontSize: "10px", color: "#555" }}>DNA_SEQUENCE</div>
+                                    <div style={{ fontFamily: "monospace", color: "#ddd", fontSize: "14px", letterSpacing: "1px", wordBreak: "break-all" }}>
+                                        {dna !== "N/A" ? dna : <span style={{color: "#444"}}>ENCRYPTED</span>}
                                     </div>
                                 </div>
-                                <div>
-                                    <div style={{ fontSize: "10px", color: "#555" }}>VOLATILITY</div>
-                                    <div style={{ color: THEME.accent, fontSize: "16px", fontWeight: "bold" }}>{volatility}</div>
+
+                                <div style={{ display: "flex", gap: "20px" }}>
+                                    <div>
+                                        <div style={{ fontSize: "10px", color: "#555" }}>MUTATION_CLASS</div>
+                                        <div style={{ color: getClassColor(mutationClass), fontSize: "16px", fontWeight: "bold", textShadow: `0 0 5px ${getClassColor(mutationClass)}` }}>
+                                            {mutationClass}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: "10px", color: "#555" }}>VOLATILITY</div>
+                                        <div style={{ color: THEME.accent, fontSize: "16px", fontWeight: "bold" }}>{volatility}</div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* TYPE & BUTTONS */}
-                        <div style={{ marginTop: "auto" }}>
-                             <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <label style={{ fontSize: "10px", color: THEME.muted }}>NFT TYPE DETECTED</label>
-                                <span onClick={() => setUseManual(!useManual)} style={{ fontSize: "10px", color: THEME.highlight, cursor: "pointer", textDecoration: "underline" }}>
-                                    {useManual ? "Auto-Detect" : "Manual Override"}
-                                </span>
-                             </div>
-                             
-                             {useManual && (
-                                <input 
-                                    type="text" 
-                                    value={manualType} 
-                                    onChange={(e) => setManualType(e.target.value)} 
-                                    placeholder="Paste NFT Type..."
-                                    style={{ width: "100%", background: "#222", border: `1px solid ${THEME.danger}`, color: "white", padding: "8px", marginBottom: "10px", fontFamily: "monospace" }}
-                                />
-                             )}
+                            {/* TYPE & BUTTONS */}
+                            <div style={{ marginTop: "auto" }}>
+                                    <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <label style={{ fontSize: "10px", color: THEME.muted }}>NFT TYPE DETECTED</label>
+                                    <span onClick={() => setUseManual(!useManual)} style={{ fontSize: "10px", color: THEME.highlight, cursor: "pointer", textDecoration: "underline" }}>
+                                        {useManual ? "Auto-Detect" : "Manual Override"}
+                                    </span>
+                                    </div>
+                                    
+                                    {useManual && (
+                                    <input 
+                                        type="text" 
+                                        value={manualType} 
+                                        onChange={(e) => setManualType(e.target.value)} 
+                                        placeholder="Paste NFT Type..."
+                                        style={{ width: "100%", background: "#222", border: `1px solid ${THEME.danger}`, color: "white", padding: "8px", marginBottom: "10px", fontFamily: "monospace" }}
+                                    />
+                                    )}
 
-                            <button onClick={handleBuy} disabled={isPending} style={{ 
-                                width: "100%", padding: "15px", 
-                                background: finalType ? THEME.highlight : "#333", 
-                                color: "white", border: "none", 
-                                cursor: "pointer", 
-                                fontWeight: "900", fontSize: "16px", letterSpacing: "2px", textTransform: "uppercase",
-                                boxShadow: finalType ? `4px 4px 0px ${THEME.secondary}` : "none",
-                                opacity: isPending ? 0.7 : 1
-                            }}>
-                                {isPending ? "SCANNING NETWORK..." : "EXECUTE BUY"}
-                            </button>
+                                    <button onClick={handleBuy} disabled={isPending} style={{ 
+                                    width: "100%", padding: "15px", 
+                                    background: finalType ? THEME.highlight : "#333", 
+                                    color: "white", border: "none", 
+                                    cursor: "pointer", 
+                                    fontWeight: "900", fontSize: "16px", letterSpacing: "2px", textTransform: "uppercase",
+                                    boxShadow: finalType ? `4px 4px 0px ${THEME.secondary}` : "none",
+                                    opacity: isPending ? 0.7 : 1
+                                    }}>
+                                    {isPending ? "SCANNING NETWORK..." : "EXECUTE BUY"}
+                                    </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+
+            {/* FEEDBACK MODAL (RENDERED ON TOP) */}
+            {feedback.type && (
+                <TransactionFeedback 
+                    type={feedback.type} 
+                    message={feedback.message} 
+                    onClose={handleFeedbackClose} 
+                />
+            )}
+        </>
     );
 }
