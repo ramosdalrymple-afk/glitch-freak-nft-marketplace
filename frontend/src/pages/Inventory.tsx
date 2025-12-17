@@ -2,6 +2,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClientQuery } fr
 import { Transaction } from "@mysten/sui/transactions";
 import { useNetworkVariable } from "../networkConfig";
 import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion"; // NEW IMPORT
 
 // --- THEME CONSTANTS ---
 const THEME = {
@@ -13,7 +14,7 @@ const THEME = {
   text: "#ffffff",
   muted: "#666666",
   border: "#2A2A35",
-  danger: "#FF4444"     // Added this to match Marketplace error styles
+  danger: "#FF4444"     
 };
 
 // --- HELPER: ROBUST ATTRIBUTE EXTRACTOR ---
@@ -58,11 +59,11 @@ const getAttribute = (item: any, key: string): string => {
   return "N/A";
 };
 
-// --- COMPONENT: TRANSACTION FEEDBACK MODAL (IMPORTED FROM MARKETPLACE) ---
+// --- COMPONENT: TRANSACTION FEEDBACK MODAL (ANIMATED) ---
 function TransactionFeedback({ type, message, onClose }: { type: 'success' | 'error', message: string, onClose: () => void }) {
   const isSuccess = type === 'success';
   const primaryColor = isSuccess ? THEME.accent : THEME.danger;
-  const title = isSuccess ? "ASSET LISTED" : "CRITICAL FAILURE"; // Changed title slightly for inventory context
+  const title = isSuccess ? "ASSET LISTED" : "CRITICAL FAILURE"; 
   const icon = isSuccess ? "✓" : "!";
 
   return (
@@ -71,69 +72,101 @@ function TransactionFeedback({ type, message, onClose }: { type: 'success' | 'er
       background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)",
       display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000
     }}>
-      <div style={{
-        width: "450px", maxWidth: "90%",
-        background: THEME.bg,
-        border: `2px solid ${primaryColor}`,
-        boxShadow: `0 0 30px ${primaryColor}40`,
-        position: "relative",
-        padding: "2px" // Inner border effect
-      }}>
-        {/* DECORATIVE CORNERS */}
-        <div style={{ position: "absolute", top: "-2px", left: "-2px", width: "10px", height: "10px", background: primaryColor }}></div>
-        <div style={{ position: "absolute", bottom: "-2px", right: "-2px", width: "10px", height: "10px", background: primaryColor }}></div>
-
-        {/* HEADER */}
-        <div style={{ background: primaryColor, padding: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{
-            background: "black", color: primaryColor, width: "24px", height: "24px",
-            display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold"
-          }}>
-            {icon}
-          </div>
-          <h3 style={{ margin: 0, color: "black", fontSize: "16px", fontWeight: "900", letterSpacing: "2px" }}>
-            {title}
-          </h3>
-        </div>
-
-        {/* BODY */}
-        <div style={{ padding: "30px", textAlign: "center" }}>
-          <p style={{
-            fontFamily: "monospace", color: "white", fontSize: "14px", lineHeight: "1.5",
-            borderLeft: `2px solid ${THEME.border}`, paddingLeft: "15px", margin: "0 0 20px 0", textAlign: "left"
-          }}>
-            {type === 'error' ? "ERROR_LOG: " : "TRANSACTION_HASH: "}<br />
-            <span style={{ color: type === 'error' ? "#ff8888" : "#ccffcc", wordBreak: "break-all" }}>
-              {message}
-            </span>
-          </p>
-
-          <button onClick={onClose} style={{
-            background: "transparent",
-            border: `1px solid ${primaryColor}`,
-            color: primaryColor,
-            padding: "12px 30px",
-            fontSize: "14px",
-            fontWeight: "bold",
-            cursor: "pointer",
-            textTransform: "uppercase",
-            letterSpacing: "1px",
-            width: "100%",
-            transition: "all 0.2s"
+      {/* 3D ENTRY ANIMATION */}
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0, rotateX: 20 }}
+        animate={{ scale: 1, opacity: 1, rotateX: 0 }}
+        exit={{ scale: 0.8, opacity: 0, rotateX: -20 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        style={{
+          width: "450px", maxWidth: "90%",
+          background: THEME.bg,
+          position: "relative",
+          perspective: "1000px"
+        }}
+      >
+        {/* PULSING GLOW BORDER */}
+        <motion.div
+          animate={{
+            boxShadow: [
+              `0 0 10px ${primaryColor}20`,
+              `0 0 40px ${primaryColor}60`, // High intensity pulse
+              `0 0 10px ${primaryColor}20`
+            ],
+            borderColor: primaryColor
           }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = primaryColor;
-              e.currentTarget.style.color = "black";
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            border: `2px solid ${primaryColor}`,
+            padding: "2px", // Inner border effect
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          {/* MOVING LIGHT SHEEN EFFECT */}
+          <motion.div
+            animate={{ left: ["-100%", "200%"] }}
+            transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1, ease: "linear" }}
+            style={{
+              position: "absolute", top: 0, width: "50%", height: "100%",
+              background: `linear-gradient(90deg, transparent, ${primaryColor}20, transparent)`,
+              transform: "skewX(-20deg)",
+              pointerEvents: "none",
+              zIndex: 1
             }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = primaryColor;
-            }}
-          >
-            {isSuccess ? "CONFIRM & CLOSE" : "ACKNOWLEDGE ERROR"}
-          </button>
-        </div>
-      </div>
+          />
+
+          {/* DECORATIVE CORNERS */}
+          <div style={{ position: "absolute", top: "-2px", left: "-2px", width: "10px", height: "10px", background: primaryColor, zIndex: 2 }}></div>
+          <div style={{ position: "absolute", bottom: "-2px", right: "-2px", width: "10px", height: "10px", background: primaryColor, zIndex: 2 }}></div>
+
+          {/* HEADER */}
+          <div style={{ background: primaryColor, padding: "10px", display: "flex", alignItems: "center", gap: "10px", position: "relative", zIndex: 2 }}>
+            <div style={{
+              background: "black", color: primaryColor, width: "24px", height: "24px",
+              display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold"
+            }}>
+              {icon}
+            </div>
+            <h3 style={{ margin: 0, color: "black", fontSize: "16px", fontWeight: "900", letterSpacing: "2px" }}>
+              {title}
+            </h3>
+          </div>
+
+          {/* BODY */}
+          <div style={{ padding: "30px", textAlign: "center", position: "relative", zIndex: 2 }}>
+            <p style={{
+              fontFamily: "monospace", color: "white", fontSize: "14px", lineHeight: "1.5",
+              borderLeft: `2px solid ${THEME.border}`, paddingLeft: "15px", margin: "0 0 20px 0", textAlign: "left"
+            }}>
+              {type === 'error' ? "ERROR_LOG: " : "TRANSACTION_HASH: "}<br />
+              <span style={{ color: type === 'error' ? "#ff8888" : "#ccffcc", wordBreak: "break-all" }}>
+                {message}
+              </span>
+            </p>
+
+            <motion.button
+              onClick={onClose}
+              whileHover={{ scale: 1.05, backgroundColor: primaryColor, color: "black" }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                background: "transparent",
+                border: `1px solid ${primaryColor}`,
+                color: primaryColor,
+                padding: "12px 30px",
+                fontSize: "14px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                width: "100%",
+              }}
+            >
+              {isSuccess ? "CONFIRM & CLOSE" : "ACKNOWLEDGE ERROR"}
+            </motion.button>
+          </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
@@ -528,14 +561,17 @@ function ListModal({ item, onClose, onSuccess }: { item: any, onClose: () => voi
                 </div>
             </div>
 
-            {/* FEEDBACK POPUP - RENDERED ON TOP */}
-            {feedback && (
-                <TransactionFeedback 
-                    type={feedback.type} 
-                    message={feedback.message} 
-                    onClose={handleFeedbackClose} 
-                />
-            )}
+            {/* FEEDBACK POPUP - WRAPPED IN ANIMATE PRESENCE FOR EFFECTS */}
+            <AnimatePresence>
+                {feedback && (
+                    <TransactionFeedback 
+                        key="feedback-modal" // Required for Framer Motion to track exit
+                        type={feedback.type} 
+                        message={feedback.message} 
+                        onClose={handleFeedbackClose} 
+                    />
+                )}
+            </AnimatePresence>
         </>
     );
 }
